@@ -1,0 +1,440 @@
+------------------  ACTIVIDAD 3 -------------------
+-- Análisis exploratorio con Apache Hive sobre HDFS
+---------------------------------------------------
+
+--	ANDRES FELIPE LEAL MORA 
+--	JUAN DAVID ESCOBAR ESCOBAR 
+--	JUAN MANUEL BAUTISTA CORREA
+--	WILLIAM RAMIRO RIOS HENAO 
+	
+--------------------------------------------------
+
+
+--------------------------------------------------
+--       1. CREACION CARPETA DEL EQUIPO
+--------------------------------------------------
+
+
+hdfs dfs -mkdir /LEBRI_ANALYTICS
+
+
+--------------------------------------------------
+-- 2. COPIANDO LOS ARCHIVOS DESDE EL SISTEMA DE 
+--           FICHEROS LOCAL HACIA HDFS
+--------------------------------------------------
+
+
+hdfs dfs -copyFromLocal /actividad_3/features.csv /actividad_3/sales.csv /actividad_3/stores.csv /LEBRI_ANALYTICS
+
+
+--------------------------------------------------
+--          3. CONECTANDONOS A HIVE
+--------------------------------------------------
+
+
+beeline -u "jdbc:hive2://andres-cluster-m:10000"
+
+
+--------------------------------------------------
+--         4. CREANDO LA TABLA FEATURES
+--------------------------------------------------
+-- Creamos tablas temporales para a partir de ellas
+-- crear las tablas finales con el formato de fecha
+-- correcto, como lo trae el archivo
+
+
+CREATE EXTERNAL TABLE IF NOT EXISTS tempfeatures(
+store INT,
+fecha STRING,
+temperature DOUBLE,
+fuel_price DOUBLE,
+markdown1 DOUBLE,
+markdown2 DOUBLE,
+markdown3 DOUBLE,
+markdown4 DOUBLE,
+markdown5 DOUBLE,
+cpi DOUBLE,
+unemployment DOUBLE,
+isholiday BOOLEAN
+)
+COMMENT 'informacion adicional sobre la tienda, el departamento y las caracteristicas de la region donde esta se encuentra para cada fecha'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+TBLPROPERTIES('skip.header.line.count'='1');
+
+
+
+
+
+CREATE EXTERNAL TABLE IF NOT EXISTS caracteristicas(
+store INT,
+fecha TIMESTAMP,
+temperature DOUBLE,
+fuel_Price DOUBLE,
+markdown1 DOUBLE,
+markdown2 DOUBLE,
+markdown3 DOUBLE,
+markdown4 DOUBLE,
+markdown5 DOUBLE,
+cpi DOUBLE,
+unemployment DOUBLE,
+isholiday BOOLEAN
+)
+COMMENT 'informacion adicional sobre la tienda, el departamento y las caracteristicas de la region donde esta se encuentra para cada fecha';
+
+
+
+--------------------------------------------------
+--          5. CREANDO LA TABLA SALES
+--------------------------------------------------
+-- Creamos tablas temporales para a partir de ellas
+-- crear las tablas finales con el formato de fecha
+-- correcto, como lo trae el archivo
+
+
+CREATE TABLE IF NOT EXISTS tempsales(
+store INTEGER,
+dept STRING,
+fecha STRING,
+weekly_sales DOUBLE,
+isholiday BOOLEAN
+)
+COMMENT 'informacion historica sobre ventas entre 2010-02-05 y 2012-11-01'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+TBLPROPERTIES('skip.header.line.count'='1');
+
+
+CREATE TABLE IF NOT EXISTS sales(
+store INTEGER,
+dept STRING,
+fecha TIMESTAMP,
+weekly_sales DOUBLE,
+isholiday BOOLEAN
+)
+COMMENT 'informacion historica sobre ventas entre 2010-02-05 y 2012-11-01';
+
+
+
+--------------------------------------------------
+--         6. CREANDO LA TABLA STORES
+--------------------------------------------------
+
+
+CREATE TABLE IF NOT EXISTS stores(
+store INTEGER,
+type STRING,
+size INTEGER
+)
+COMMENT 'informacion anonimizada de 45 tiendas'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+TBLPROPERTIES('skip.header.line.count'='1');
+
+
+
+--------------------------------------------------
+--     7. CARGANDO LOS DATOS DESDE LOS CSVs
+--			   A LAS TABLAS CREADAS
+--------------------------------------------------
+
+
+ -- Tabla features
+
+LOAD DATA INPATH '/LEBRI_ANALYTICS/features.csv' INTO TABLE tempfeatures;
+
+INSERT INTO TABLE caracteristicas
+SELECT store, from_unixtime(unix_timestamp(fecha, 'dd/mm/yyyy'), 'yyyy-mm-dd'), temperature, fuel_Price, markdown1,
+       markdown2, markdown3, markdown4, markdown5, cpi, unemployment, isholiday
+FROM tempfeatures;
+
+
+ALTER TABLE tempfeatures RENAME TO features;    -- Dado que finalmente no logramos cargar satisfactoriamente la columna fecha como TIMESTAMP
+												-- usamos la tabla temporal con datos ya cargados, y le cambiamos el nombre
+
+
+
+ -- Tabla sales
+
+LOAD DATA INPATH '/LEBRI_ANALYTICS/sales.csv' INTO TABLE tempsales;
+
+INSERT INTO TABLE sales
+SELECT store, dept, from_unixtime(unix_timestamp(fecha, 'dd/mm/yyyy'), 'yyyy-mm-dd'), weekly_sales, isholiday
+FROM tempsales;
+
+
+
+ -- Tabla stores
+
+LOAD DATA INPATH '/LEBRI_ANALYTICS/stores.csv' INTO TABLE stores;
+
+
+
+--------------------------------------------------
+--   8. REVISANDO EL CONTENIDO DE LAS TABLAS
+--------------------------------------------------
+
+
+SELECT COUNT(*) AS num_rows FROM features;  -- >> 8190
+
+SELECT COUNT(*) AS num_rows FROM sales;     -- >> 421570
+
+SELECT COUNT(*) AS num_rows FROM stores;    -- >> 45
+
+
+--------------------------------------------------
+-- 9.REVISANDO LAS PRIMERAS 5 FILAS DE CADA TABLA
+--------------------------------------------------
+
+
+SELECT * FROM stores LIMIT 5;
+
+SELECT * FROM sales LIMIT 5;
+
+SELECT * FROM features LIMIT 5;
+
+
+--------------------------------------------------
+-- 10. REVISANDO EL VALOR MAX Y MIN DE LAS
+--			VARIABLES NUMERICAS
+--------------------------------------------------
+
+
+
+----- De la tabla stores
+
+
+-- Revisamos el rango de la variable size
+
+SELECT MIN(size) AS min_size, MAX(size) AS max_size    -- >> 34875	219622
+FROM stores;
+
+
+
+----- De la tabla sales
+
+
+
+-- Revisamos el rango de la variable weekly_sales
+
+SELECT MIN(weekly_sales) AS min_sales, MAX(weekly_sales) AS max_sales  -- >> -4988.94	693099.36
+FROM sales;
+
+
+
+----- De la tabla features
+
+
+
+-- Revisamos el rango de la variable temperature
+
+SELECT MIN(temperature) AS min_temp, MAX(temperature) AS max_temp  -- >> -7.29	101.95
+FROM features;
+
+
+-- Revisamos el rango de la variable fuel_Price
+
+SELECT MIN(fuel_Price) AS min_price, MAX(fuel_Price) AS max_price  -- >> 2.472	4.468
+FROM features;
+
+
+-- Revisamos el rango de la variable cpi
+
+SELECT MIN(cpi) AS min_cpi, MAX(cpi) AS max_cpi   -- >> 126.064	228.976
+FROM features;
+
+
+-- Revisamos el rango de la variable unemployment
+
+SELECT MIN(unemployment) AS min_unemp, MAX(unemployment) AS max_unemp   -- >> 3.684	14.313
+FROM features;
+
+
+
+--------------------------------------------------
+-- 11. ESTUDIANDO LAS DIFERENTES CATEGORIAS DE
+--    LAS PRINCIPALES VARIABLES CATEGORICAS
+--------------------------------------------------
+
+
+
+----- De la tabla stores
+
+
+
+-- Revisamos las categorias existentes en la variable store
+
+SELECT store, COUNT(*) AS num_entries
+FROM stores
+GROUP BY store;
+
+
+-- Revisamos las categorias existentes en la variable type
+
+SELECT DISTINCT(type)AS types FROM stores;
+
+SELECT type, COUNT(*) AS num_entries
+FROM stores
+GROUP BY type;
+
+
+
+----- De la tabla sales
+
+
+
+-- Revisamos las categorias existentes en la variable dept
+
+SELECT DISTINCT(dept) AS depts FROM sales;
+
+SELECT COUNT(*) AS num_depts FROM (SELECT DISTINCT(dept) AS depts FROM sales) unique_depts;
+
+SELECT dept, COUNT(*) AS num_entries
+FROM sales
+GROUP BY dept
+ORDER BY num_entries DESC;
+
+-- Revisamos las categorias existentes en la variable store
+
+SELECT store, COUNT(*) AS num_entries
+FROM sales
+GROUP BY store
+ORDER BY num_entries DESC;
+
+
+
+--------------------------------------------------
+--    12. BUSCANDO ANOMALÍAS EN LOS DATOS
+--------------------------------------------------
+
+
+
+----- De la tabla sales
+
+
+
+-- Revisamos si existen registros con valores negativos en las ventas
+
+SELECT *
+FROM sales
+WHERE weekly_sales < 0;
+
+-- Revisamos el numero de registros con valores negativos en ventas
+
+SELECT COUNT(*) AS num_negativos FROM (SELECT * FROM sales  WHERE weekly_sales < 0) neg_sales;  -- >> 1285
+
+-- Revisamos el numero de registros con valores nulos en ventas
+
+SELECT COUNT(*) AS num_nulos FROM (SELECT * FROM sales  WHERE weekly_sales IS NULL) null_sales;  -- >> 0
+
+
+
+----- De la tabla features
+
+
+-- Revisamos valores negativos y nulos en la variable temperature
+
+
+SELECT COUNT(*) AS num_negativos FROM (SELECT * FROM features  WHERE temperature < 0) neg_temp;   -- >> 4
+SELECT COUNT(*) AS num_nulos FROM (SELECT * FROM features  WHERE temperature IS NULL) null_temp;  -- >> 0
+
+
+-- Revisamos valores negativos y nulos en la variable fuel_Price
+
+
+SELECT COUNT(*) AS num_negativos FROM (SELECT * FROM features  WHERE fuel_price < 0) neg_fuel;    -- >> 0
+SELECT COUNT(*) AS num_nulos FROM (SELECT * FROM features  WHERE fuel_price IS NULL) null_fuel;   -- >> 0
+
+
+-- Revisamos valores negativos y nulos en la variable cpi
+
+
+SELECT COUNT(*) AS num_negativos FROM (SELECT * FROM features  WHERE cpi < 0) neg_cpi;            -- >> 0
+SELECT COUNT(*) AS num_nulos FROM (SELECT * FROM features  WHERE cpi IS NULL) null_cpi;           -- >> 585
+
+
+-- Revisamos valores negativos y nulos en la variable unemployment
+
+
+SELECT COUNT(*) AS num_negativos FROM (SELECT * FROM features  WHERE unemployment < 0) neg_unemp;  -- >> 0
+SELECT COUNT(*) AS num_nulos FROM (SELECT * FROM features  WHERE unemployment IS NULL) null_unemp; -- >> 585
+
+
+
+-----------
+
+
+
+-- Revisamos las ventas que fueron estadísticamente atípicas, que estén 3 desviaciones estandar
+-- por encima de la media, o 3 por debajo. Considerando unicamente los registros de ventas positivos
+
+-- Calculamos valor de la media 
+WITH sales_avg AS (SELECT AVG(weekly_sales) AS mean FROM sales WHERE weekly_sales >= 0),
+     sales_std AS (SELECT STDDEV(weekly_sales) AS std FROM sales WHERE weekly_sales >= 0)   -- Media de ventas sin los negativos = 16030.32
+SELECT * FROM sales_avg;
+
+-- Calculamos valor de la desviacion estandar
+WITH sales_avg AS (SELECT AVG(weekly_sales) AS mean FROM sales WHERE weekly_sales >= 0),
+     sales_std AS (SELECT STDDEV(weekly_sales) AS std FROM sales WHERE weekly_sales >= 0)   -- STD de ventas sin los negativos = 22728.47
+SELECT * FROM sales_std;
+
+
+-- Hallamos y contamos los registros con ventas atípicamente altas, 2.96 desviaciones por encima de la media
+SELECT * FROM sales WHERE (weekly_sales >= (16030.32 + (2.96*22728.47)));
+
+SELECT COUNT(*) AS ventas_altas FROM (SELECT * FROM sales WHERE (weekly_sales >= (16030.32 + (2.96*22728.47)))) anormales_arriba; -- >> 9131
+
+
+-- Hallamos y contamos los registros con ventas atípicamente bajas, 2.96 desviaciones por debajo de la media
+SELECT * FROM sales WHERE (weekly_sales >= (16030.32 + (2.96*22728.47)));
+
+SELECT COUNT(*) AS ventas_bajas FROM (SELECT * FROM sales WHERE (weekly_sales <= (16030.32 - (2.96*22728.47)))) anormales_abajo; -- >> 0
+
+
+
+--------------------------------------------------
+--    13. CREANDO UNA VISTA QUE AGREGUE VALOR
+--------------------------------------------------
+
+
+
+DROP VIEW IF EXISTS stores_types_sales;
+CREATE VIEW stores_types_sales AS
+SELECT s2.store, s2.type, s2.size, s1.dept, s1.fecha, s1.weekly_sales, s1.isholiday
+FROM sales s1
+INNER JOIN stores s2
+ON s1.store = s2.store;
+
+
+
+--------------------------------------------------
+--    14. CREANDO UNA VISTAS DE AGREGACIONES
+--             QUE AGREGUEN VALOR
+--------------------------------------------------
+
+
+-- Vista 1
+DROP VIEW IF EXISTS sales_avg;
+CREATE VIEW sales_avg AS
+SELECT AVG(weekly_sales) AS mean FROM sales WHERE weekly_sales >= 0;
+
+-- Vista 2
+DROP VIEW IF EXISTS sales_std;
+CREATE VIEW sales_std AS
+SELECT STDDEV(weekly_sales) AS std FROM sales WHERE  weekly_sales >= 0;
+
+
+
+--------------------------------------------------
+--    15. CREANDO UNA VISTA DE AGRUPACIÓN Y
+--        AGREGACIONES QUE AGREGUE VALOR             
+--------------------------------------------------
+
+DROP VIEW IF EXISTS ventas_volumen_ingresos;
+CREATE VIEW ventas_volumen_ingresos AS
+SELECT s2.store, s2.size, COUNT(*) as num_ventas, SUM(s1.weekly_sales) as ingresos
+FROM sales as s1
+INNER JOIN stores as s2
+ON s1.store = s2.store
+GROUP BY s2.store, s2.size
+ORDER BY ingresos DESC;
